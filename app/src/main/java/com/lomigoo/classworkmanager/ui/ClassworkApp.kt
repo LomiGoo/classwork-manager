@@ -8,6 +8,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +37,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     val rawClassworks by viewModel.classworks.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
     val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
+    val isDarkMode by viewModel.isDarkMode.collectAsState()
 
     var currentFilter by remember { mutableStateOf("All") }
     var currentSortOrder by remember { mutableStateOf("Created Date") }
@@ -39,6 +46,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
 
     var showAddDialog by remember { mutableStateOf(value = false) }
     var classworkToEdit by remember { mutableStateOf<Classwork?>(null) }
+    var classworkToDelete by remember { mutableStateOf<Classwork?>(null) }
     var showAppInfo by remember { mutableStateOf(value = false) }
     var showUpdateOptions by remember { mutableStateOf(value = false) }
 
@@ -87,9 +95,15 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                 title = { Text("Classwork Manager") },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
                 actions = {
+                    IconButton(onClick = { viewModel.toggleDarkMode() }) {
+                        Icon(
+                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = "Toggle Theme"
+                        )
+                    }
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Text("⇅", style = MaterialTheme.typography.titleLarge)
+                            Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                             DropdownMenuItem(
@@ -113,14 +127,14 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                         }
                     }
                     IconButton(onClick = { showAppInfo = true }) {
-                        Text("ℹ", style = MaterialTheme.typography.titleLarge)
+                        Icon(imageVector = Icons.Default.Info, contentDescription = "App Info")
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
-                Text("+", style = MaterialTheme.typography.titleLarge)
+                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
             }
         }
     ) { padding ->
@@ -168,7 +182,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                                 viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
                             },
                             onEdit = { classworkToEdit = item },
-                            onDelete = { viewModel.deleteClasswork(item) },
+                            onDelete = { classworkToDelete = item },
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                     }
@@ -225,6 +239,32 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                         showUpdateOptions = false
                     }) {
                         Text("Manual (GitHub)")
+                    }
+                }
+            )
+        }
+
+        classworkToDelete?.let { task ->
+            AlertDialog(
+                onDismissRequest = { classworkToDelete = null },
+                title = { Text("Delete Classwork") },
+                text = {
+                    Text("Are you sure you want to delete '${task.courseName}: ${task.actionDescription}'? This action cannot be undone.")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteClasswork(task)
+                            classworkToDelete = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Delete", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { classworkToDelete = null }) {
+                        Text("Cancel")
                     }
                 }
             )
