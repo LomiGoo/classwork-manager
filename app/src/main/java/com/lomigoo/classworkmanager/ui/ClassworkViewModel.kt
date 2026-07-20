@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.lomigoo.classworkmanager.data.Classwork
 import com.lomigoo.classworkmanager.data.ClassworkDbHelper
+import com.lomigoo.classworkmanager.data.ThemePreference
 import com.lomigoo.classworkmanager.data.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import java.time.ZoneId
 class ClassworkViewModel(
     private val dbHelper: ClassworkDbHelper,
     private val updateManager: UpdateManager,
+    private val themePreference: ThemePreference,
 ) : ViewModel() {
     private val _classworks = MutableStateFlow<List<Classwork>>(emptyList())
     val classworks: StateFlow<List<Classwork>> = _classworks.asStateFlow()
@@ -28,6 +30,9 @@ class ClassworkViewModel(
 
     private val _isDownloading = MutableStateFlow(value = false)
     val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    private val _isDarkMode = MutableStateFlow(themePreference.isDarkMode())
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
 
     val currentVersion: String = updateManager.getCurrentVersion()
 
@@ -61,6 +66,12 @@ class ClassworkViewModel(
         }
     }
 
+    fun toggleDarkMode() {
+        val newValue = !_isDarkMode.value
+        _isDarkMode.value = newValue
+        themePreference.setDarkMode(newValue)
+    }
+
     fun createClasswork(course: String, action: String, target: String) {
         viewModelScope.launch {
             val dateCreated = LocalDate.now(ZoneId.of("Asia/Manila")).toString()
@@ -86,12 +97,13 @@ class ClassworkViewModel(
 
 class ClassworkViewModelFactory(
     private val dbHelper: ClassworkDbHelper,
-    private val updateManager: UpdateManager
+    private val updateManager: UpdateManager,
+    private val themePreference: ThemePreference,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ClassworkViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ClassworkViewModel(dbHelper, updateManager) as T
+            return ClassworkViewModel(dbHelper, updateManager, themePreference) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
