@@ -1,0 +1,6 @@
+- [x] Update `ClassworkCard` styles for better contrast
+- [x] Add `isAscending` state and update sorting logic in `ClassworkApp`
+- [x] Update UI to include a sort order toggle (ASC/DESC)
+- [x] Update `ClassworkDialog` with `DatePicker` constraints (July 2026 onwards)
+- [x] Make links in `App Info` dialog clickable using `LocalUriHandler`
+- [x] Verify build and functionality
