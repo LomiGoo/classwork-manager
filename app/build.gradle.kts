@@ -6,27 +6,26 @@ plugins {
 
 android {
     namespace = "com.lomigoo.classworkmanager"
-    compileSdk {
-        version = release(37) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.lomigoo.classworkmanager"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
-        versionName = "3.2.0"
+        versionName = "3.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            optimization {
-                enable = false
-            }
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     compileOptions {
@@ -49,6 +48,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.compose.markdown)
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)

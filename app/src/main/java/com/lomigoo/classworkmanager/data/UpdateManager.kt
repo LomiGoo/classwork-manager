@@ -10,56 +10,66 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import androidx.core.content.FileProvider
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.lomigoo.classworkmanager.data.notifications.NotificationWorker
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import java.io.IOException
-
-@Serializable
-data class GitHubAsset(
-    val name: String,
-    @SerialName("browser_download_url") val downloadUrl: String,
-)
-
-@Serializable
-data class GitHubRelease(
-    @SerialName("tag_name") val tagName: String,
-    @SerialName("html_url") val htmlUrl: String,
-    val body: String? = null,
-    val assets: List<GitHubAsset> = emptyList(),
-)
 
 class UpdateManager(private val context: Context) {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
+    private val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-    data class UpdateInfo(
-        val isUpdateAvailable: Boolean,
-        val latestVersion: String,
-        val releaseUrl: String,
-        val downloadUrl: String? = null,
-    )
+    companion object {
+        private const val TAG = "UpdateManager"
+    }
 
     suspend fun checkForUpdates(): UpdateInfo = withContext(Dispatchers.IO) {
         val currentVersion = getCurrentVersion()
-        val latestRelease = fetchLatestRelease()
+        val releases = fetchReleases()
+        val lastSeenVersion = sharedPrefs.getString("last_seen_version", "0.0.0") ?: "0.0.0"
+
+        val latestRelease = releases.firstOrNull { !it.preRelease && !it.draft }
 
         if (latestRelease != null) {
-            val latestVersion = latestRelease.tagName.removePrefix("v")
-            val isAvailable = isVersionNewer(currentVersion, latestVersion)
+            val latestVersion = latestRelease.tagName.removePrefix("v").trim()
+            val isUpdateAvailable = isVersionNewer(currentVersion, latestVersion)
+            
+            Log.d(TAG, "Detection Check: Local=$currentVersion, GitHub=$latestVersion, UpdateAvailable=$isUpdateAvailable")
+
             val apkAsset = latestRelease.assets.find { it.name.endsWith(".apk") }
-            UpdateInfo(isAvailable, latestVersion, latestRelease.htmlUrl, apkAsset?.downloadUrl)
+            
+            UpdateInfo(
+                isUpdateAvailable = isUpdateAvailable,
+                latestVersion = latestVersion,
+                releaseUrl = latestRelease.htmlUrl,
+                downloadUrl = apkAsset?.downloadUrl,
+                releaseName = latestRelease.name ?: "Version $latestVersion",
+                releaseNotes = latestRelease.body ?: "Bug fixes and performance improvements.",
+                isWhatsNewAvailable = currentVersion == latestVersion // Available if notes haven't been shown for this version
+            )
         } else {
-            UpdateInfo(isUpdateAvailable = false, latestVersion = currentVersion, releaseUrl = "")
+            Log.d(TAG, "Detection Check: No releases found on GitHub.")
+            UpdateInfo(
+                isUpdateAvailable = false, 
+                latestVersion = currentVersion, 
+                releaseUrl = "",
+                releaseNotes = "Unable to fetch release notes from GitHub."
+            )
         }
+    }
+
+    fun markVersionAsSeen(version: String) {
+        sharedPrefs.edit().putString("last_seen_version", version).apply()
     }
 
     fun downloadAndInstallApk(url: String): Flow<Int> = callbackFlow {
@@ -129,9 +139,9 @@ class UpdateManager(private val context: Context) {
         }
     }
 
-    private fun fetchLatestRelease(): GitHubRelease? {
+    private fun fetchReleases(): List<GitHubRelease> {
         val request = Request.Builder()
-            .url("https://api.github.com/repos/LomiGoo/classwork-manager/releases/latest")
+            .url("https://api.github.com/repos/LomiGoo/classwork-manager/releases")
             .header("Accept", "application/vnd.github.v3+json")
             .build()
 
@@ -139,23 +149,42 @@ class UpdateManager(private val context: Context) {
             client.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     response.body?.string()?.let { body ->
-                        json.decodeFromString<GitHubRelease>(body)
-                    }
-                } else null
+                        try {
+                            json.decodeFromString<List<GitHubRelease>>(body)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Parsing error: ${e.message}")
+                            emptyList()
+                        }
+                    } ?: emptyList()
+                } else {
+                    Log.e(TAG, "API Error: ${response.code}")
+                    emptyList()
+                }
             }
-        } catch (e: IOException) {
-            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Network error: ${e.message}")
+            emptyList()
         }
     }
 
-    private fun isVersionNewer(current: String, latest: String): Boolean {
-        val currentParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+    fun triggerNotificationTest() {
+        val workRequest = OneTimeWorkRequestBuilder<NotificationWorker>().build()
+        WorkManager.getInstance(context).enqueue(workRequest)
+    }
 
-        for (i in 0 until minOf(currentParts.size, latestParts.size)) {
-            if (latestParts[i] > currentParts[i]) return true
-            if (latestParts[i] < currentParts[i]) return false
+    private fun isVersionNewer(current: String, latest: String): Boolean {
+        // Clean strings and split by dots/dashes
+        val currentParts = current.lowercase().removePrefix("v").split(".", "-").mapNotNull { it.toIntOrNull() }
+        val latestParts = latest.lowercase().removePrefix("v").split(".", "-").mapNotNull { it.toIntOrNull() }
+
+        val maxLength = maxOf(currentParts.size, latestParts.size)
+        for (i in 0 until maxLength) {
+            val currentPart = if (i < currentParts.size) currentParts[i] else 0
+            val latestPart = if (i < latestParts.size) latestParts[i] else 0
+            
+            if (latestPart > currentPart) return true
+            if (latestPart < currentPart) return false
         }
-        return latestParts.size > currentParts.size
+        return false
     }
 }
