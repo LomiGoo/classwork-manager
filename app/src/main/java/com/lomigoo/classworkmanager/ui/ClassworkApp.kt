@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Announcement
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
@@ -20,10 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.lomigoo.classworkmanager.R
 import com.lomigoo.classworkmanager.data.Classwork
+import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -36,6 +40,7 @@ import java.util.Calendar
 fun ClassworkApp(viewModel: ClassworkViewModel) {
     val rawClassworks by viewModel.classworks.collectAsState()
     val updateInfo by viewModel.updateInfo.collectAsState()
+    val whatsNewInfo by viewModel.whatsNewInfo.collectAsState()
     val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
 
@@ -49,6 +54,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     var classworkToDelete by remember { mutableStateOf<Classwork?>(null) }
     var showAppInfo by remember { mutableStateOf(value = false) }
     var showUpdateOptions by remember { mutableStateOf(value = false) }
+    var showNoUpdatesDialog by remember { mutableStateOf(value = false) }
 
     val uriHandler = LocalUriHandler.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -138,56 +144,104 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
             }
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Row(
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("All", "Pending", "Done").forEach { filter ->
+                        FilterChip(
+                            selected = currentFilter == filter,
+                            onClick = { currentFilter = filter },
+                            label = { Text(filter) },
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Sorted by: $currentSortOrder (${if (isAscending) "ASC" else "DESC"})",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+
+                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).weight(1f)) {
+                    if (processedClassworks.isEmpty()) {
+                        item {
+                            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = if (currentFilter == "All") "No classwork found. Tap + to create one!"
+                                    else "No tasks fit the criteria: $currentFilter",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                            }
+                        }
+                    } else {
+                        items(processedClassworks.size) { index ->
+                            val item = processedClassworks[index]
+                            ClassworkCard(
+                                classwork = item,
+                                onToggleStatus = {
+                                    viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
+                                },
+                                onEdit = { classworkToEdit = item },
+                                onDelete = { classworkToDelete = item },
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                }
+            }
+
+            // Floating "What's New" / Update Notice (Bottom Left)
+            SmallFloatingActionButton(
+                onClick = {
+                    if (updateInfo?.isUpdateAvailable == true) {
+                        showUpdateOptions = true
+                    } else if (updateInfo?.isWhatsNewAvailable == true) {
+                        viewModel.showWhatsNew()
+                    } else {
+                        showNoUpdatesDialog = true
+                    }
+                },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp),
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
             ) {
-                listOf("All", "Pending", "Done").forEach { filter ->
-                    FilterChip(
-                        selected = currentFilter == filter,
-                        onClick = { currentFilter = filter },
-                        label = { Text(filter) },
-                        shape = RoundedCornerShape(16.dp)
+                BadgedBox(
+                    badge = {
+                        if (updateInfo?.isUpdateAvailable == true) {
+                            Badge(containerColor = Color.Red) {
+                                Text("!", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Announcement,
+                        contentDescription = "Updates"
                     )
                 }
             }
+        }
 
-            Text(
-                text = "Sorted by: $currentSortOrder (${if (isAscending) "ASC" else "DESC"})",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-
-            LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).weight(1f)) {
-                if (processedClassworks.isEmpty()) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (currentFilter == "All") "No classwork found. Tap + to create one!"
-                                else "No tasks fit the criteria: $currentFilter",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    }
-                } else {
-                    items(processedClassworks.size) { index ->
-                        val item = processedClassworks[index]
-                        ClassworkCard(
-                            classwork = item,
-                            onToggleStatus = {
-                                viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
-                            },
-                            onEdit = { classworkToEdit = item },
-                            onDelete = { classworkToDelete = item },
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
+        if (showNoUpdatesDialog) {
+            AlertDialog(
+                onDismissRequest = { showNoUpdatesDialog = false },
+                title = { Text("App Status") },
+                text = { Text("No Updates Available. You are using the latest version.") },
+                confirmButton = {
+                    TextButton(onClick = { showNoUpdatesDialog = false }) {
+                        Text("OK")
                     }
                 }
-            }
+            )
         }
 
         if (showAddDialog) {
@@ -265,6 +319,40 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                 dismissButton = {
                     TextButton(onClick = { classworkToDelete = null }) {
                         Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        whatsNewInfo?.let { info ->
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissWhatsNew() },
+                title = {
+                    Text(
+                        text = info.releaseName ?: "What's New",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp)
+                            .verticalScroll(rememberScrollState())
+                    ) {
+                        MarkdownText(
+                            markdown = info.releaseNotes ?: "Bug fixes and performance improvements.",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            linkColor = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { viewModel.dismissWhatsNew() }) {
+                        Text("Got it!")
                     }
                 }
             )
@@ -363,6 +451,8 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
                 },
                 confirmButton = {

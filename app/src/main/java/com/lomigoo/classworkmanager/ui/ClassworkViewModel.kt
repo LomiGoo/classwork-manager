@@ -3,9 +3,12 @@ package com.lomigoo.classworkmanager.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.lomigoo.classworkmanager.data.Classwork
 import com.lomigoo.classworkmanager.data.ClassworkDbHelper
 import com.lomigoo.classworkmanager.data.ThemePreference
+import com.lomigoo.classworkmanager.data.UpdateInfo
 import com.lomigoo.classworkmanager.data.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,8 +25,8 @@ class ClassworkViewModel(
     private val _classworks = MutableStateFlow<List<Classwork>>(emptyList())
     val classworks: StateFlow<List<Classwork>> = _classworks.asStateFlow()
 
-    private val _updateInfo = MutableStateFlow<UpdateManager.UpdateInfo?>(null)
-    val updateInfo: StateFlow<UpdateManager.UpdateInfo?> = _updateInfo.asStateFlow()
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
 
     private val _isCheckingUpdates = MutableStateFlow(value = false)
     val isCheckingUpdates: StateFlow<Boolean> = _isCheckingUpdates.asStateFlow()
@@ -33,6 +36,9 @@ class ClassworkViewModel(
 
     private val _isDarkMode = MutableStateFlow(themePreference.isDarkMode())
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    private val _whatsNewInfo = MutableStateFlow<UpdateInfo?>(null)
+    val whatsNewInfo: StateFlow<UpdateInfo?> = _whatsNewInfo.asStateFlow()
 
     val currentVersion: String = updateManager.getCurrentVersion()
 
@@ -49,9 +55,32 @@ class ClassworkViewModel(
 
     fun checkForUpdates() {
         viewModelScope.launch {
-            _isCheckingUpdates.value = true
-            _updateInfo.value = updateManager.checkForUpdates()
-            _isCheckingUpdates.value = false
+            try {
+                _isCheckingUpdates.value = true
+                val result = updateManager.checkForUpdates()
+                _updateInfo.value = result
+                // Auto pop-up trigger removed as requested.
+                // It will only show via the floating notice icon if versions match.
+            } catch (e: Exception) {
+                // Global safety: catch any unexpected network or parsing issues
+            } finally {
+                _isCheckingUpdates.value = false
+            }
+        }
+    }
+
+    fun dismissWhatsNew() {
+        _whatsNewInfo.value?.let { info ->
+            updateManager.markVersionAsSeen(info.latestVersion)
+        }
+        _whatsNewInfo.value = null
+    }
+
+    fun showWhatsNew() {
+        _updateInfo.value?.let { info ->
+            if (info.isWhatsNewAvailable) {
+                _whatsNewInfo.value = info
+            }
         }
     }
 
@@ -64,6 +93,10 @@ class ClassworkViewModel(
                 }
             }
         }
+    }
+
+    fun triggerNotificationTest() {
+        updateManager.triggerNotificationTest()
     }
 
     fun toggleDarkMode() {

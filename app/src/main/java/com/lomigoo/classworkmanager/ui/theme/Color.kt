@@ -2,13 +2,13 @@ package com.lomigoo.classworkmanager.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// JRU Official Colors
-val JRU_Blue = Color(0xFF333399)
-val JRU_Gold = Color(0xFFC5A021) // Refined: Deeper gold for better contrast in Light Mode
+// JRU Official Colors (Refined: More Blue, Less Purple)
+val JRU_Blue = Color(0xFF0047AB) // Royal Blue
+val JRU_Gold = Color(0xFFC5A021) 
 
 // Accessible variants for Dark Mode
-val JRU_Blue_Light = Color(0xFF9999FF)
-val JRU_Gold_Light = Color(0xFFFFD700) // Original bright gold for Dark Mode pop
+val JRU_Blue_Light = Color(0xFF6495ED) // Cornflower Blue
+val JRU_Gold_Light = Color(0xFFFFD700) 
 
 // Legacy colors (kept for compatibility if needed elsewhere)
 val Purple80 = Color(0xFFD0BCFF)
