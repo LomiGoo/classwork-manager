@@ -12,8 +12,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Announcement
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -419,38 +421,65 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Text("GitHub:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Public,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("GitHub:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable { uriHandler.openUri("https://github.com/LomiGoo") },
                         )
 
-                        Text("Source Code:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Code,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Source Code:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo/classwork-manager",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable {
                                     uriHandler.openUri("https://github.com/LomiGoo/classwork-manager")
                                 },
                         )
 
-                        Text("Release Application List:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Announcement,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Release Application List:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo/classwork-manager/releases",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable {
                                     uriHandler.openUri("https://github.com/LomiGoo/classwork-manager/releases")
                                 },
