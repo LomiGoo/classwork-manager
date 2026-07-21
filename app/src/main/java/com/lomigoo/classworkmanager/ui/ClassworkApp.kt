@@ -13,8 +13,8 @@ import androidx.compose.material.icons.automirrored.filled.Announcement
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,11 +26,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.lomigoo.classworkmanager.R
+import com.lomigoo.classworkmanager.data.AppPreferences
 import com.lomigoo.classworkmanager.data.Classwork
 import dev.jeziellago.compose.markdowntext.MarkdownText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Calendar
@@ -43,6 +45,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     val whatsNewInfo by viewModel.whatsNewInfo.collectAsState()
     val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val dateFormat by viewModel.dateFormat.collectAsState()
 
     var currentFilter by remember { mutableStateOf("All") }
     var currentSortOrder by remember { mutableStateOf("Created Date") }
@@ -52,12 +55,25 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     var showAddDialog by remember { mutableStateOf(value = false) }
     var classworkToEdit by remember { mutableStateOf<Classwork?>(null) }
     var classworkToDelete by remember { mutableStateOf<Classwork?>(null) }
-    var showAppInfo by remember { mutableStateOf(value = false) }
+    var showSettings by remember { mutableStateOf(value = false) }
     var showUpdateOptions by remember { mutableStateOf(value = false) }
     var showNoUpdatesDialog by remember { mutableStateOf(value = false) }
 
     val uriHandler = LocalUriHandler.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    fun formatDateForDisplay(dateString: String): String {
+        return try {
+            val date = LocalDate.parse(dateString, DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            if (dateFormat == AppPreferences.FORMAT_READABLE) {
+                date.format(DateTimeFormatter.ofPattern("MMMM d, yyyy"))
+            } else {
+                dateString
+            }
+        } catch (e: Exception) {
+            dateString
+        }
+    }
 
     LaunchedEffect(updateInfo) {
         updateInfo?.let {
@@ -132,8 +148,8 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                             )
                         }
                     }
-                    IconButton(onClick = { showAppInfo = true }) {
-                        Icon(imageVector = Icons.Default.Info, contentDescription = "App Info")
+                    IconButton(onClick = { showSettings = true }) {
+                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
                     }
                 }
             )
@@ -190,6 +206,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                                 },
                                 onEdit = { classworkToEdit = item },
                                 onDelete = { classworkToDelete = item },
+                                formatDate = { formatDateForDisplay(it) }
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                         }
@@ -358,12 +375,38 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
             )
         }
 
-        if (showAppInfo) {
+        if (showSettings) {
             AlertDialog(
-                onDismissRequest = { showAppInfo = false },
-                title = { Text("App Info") },
+                onDismissRequest = { showSettings = false },
+                title = { Text("Settings & App Info") },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        Text("Preferences", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text("Date Format", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = dateFormat == AppPreferences.FORMAT_NUMBERED,
+                                onClick = { viewModel.setDateFormat(AppPreferences.FORMAT_NUMBERED) }
+                            )
+                            Text("Numbered (2026-02-01)")
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(
+                                selected = dateFormat == AppPreferences.FORMAT_READABLE,
+                                onClick = { viewModel.setDateFormat(AppPreferences.FORMAT_READABLE) }
+                            )
+                            Text("Readable (February 1, 2026)")
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        HorizontalDivider()
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text("App Information", style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         Text(
                             text = "Version: ${viewModel.currentVersion} (Android Port)",
                             style = MaterialTheme.typography.bodyMedium,
@@ -456,7 +499,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showAppInfo = false }) { Text("Close") }
+                    TextButton(onClick = { showSettings = false }) { Text("Close") }
                 }
             )
         }
@@ -468,7 +511,8 @@ fun ClassworkCard(
     classwork: Classwork,
     onToggleStatus: () -> Unit,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    formatDate: (String) -> String
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable { onToggleStatus() },
@@ -501,13 +545,13 @@ fun ClassworkCard(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Target: ${classwork.dateTarget}",
+                        text = "Target: ${formatDate(classwork.dateTarget)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Created: ${classwork.dateCreated}",
+                        text = "Created: ${formatDate(classwork.dateCreated)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

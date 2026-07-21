@@ -5,9 +5,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.lomigoo.classworkmanager.data.AppPreferences
 import com.lomigoo.classworkmanager.data.Classwork
 import com.lomigoo.classworkmanager.data.ClassworkDbHelper
-import com.lomigoo.classworkmanager.data.ThemePreference
 import com.lomigoo.classworkmanager.data.UpdateInfo
 import com.lomigoo.classworkmanager.data.UpdateManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +20,7 @@ import java.time.ZoneId
 class ClassworkViewModel(
     private val dbHelper: ClassworkDbHelper,
     private val updateManager: UpdateManager,
-    private val themePreference: ThemePreference,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
     private val _classworks = MutableStateFlow<List<Classwork>>(emptyList())
     val classworks: StateFlow<List<Classwork>> = _classworks.asStateFlow()
@@ -34,8 +34,11 @@ class ClassworkViewModel(
     private val _isDownloading = MutableStateFlow(value = false)
     val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
 
-    private val _isDarkMode = MutableStateFlow(themePreference.isDarkMode())
+    private val _isDarkMode = MutableStateFlow(appPreferences.isDarkMode())
     val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    private val _dateFormat = MutableStateFlow(appPreferences.getDateFormat())
+    val dateFormat: StateFlow<String> = _dateFormat.asStateFlow()
 
     private val _whatsNewInfo = MutableStateFlow<UpdateInfo?>(null)
     val whatsNewInfo: StateFlow<UpdateInfo?> = _whatsNewInfo.asStateFlow()
@@ -102,7 +105,12 @@ class ClassworkViewModel(
     fun toggleDarkMode() {
         val newValue = !_isDarkMode.value
         _isDarkMode.value = newValue
-        themePreference.setDarkMode(newValue)
+        appPreferences.setDarkMode(newValue)
+    }
+
+    fun setDateFormat(format: String) {
+        _dateFormat.value = format
+        appPreferences.setDateFormat(format)
     }
 
     fun createClasswork(course: String, action: String, target: String) {
@@ -131,12 +139,12 @@ class ClassworkViewModel(
 class ClassworkViewModelFactory(
     private val dbHelper: ClassworkDbHelper,
     private val updateManager: UpdateManager,
-    private val themePreference: ThemePreference,
+    private val appPreferences: AppPreferences,
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(ClassworkViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return ClassworkViewModel(dbHelper, updateManager, themePreference) as T
+            return ClassworkViewModel(dbHelper, updateManager, appPreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

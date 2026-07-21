@@ -23,29 +23,72 @@ class NotificationWorker(
         val today = LocalDate.now(manilaZone)
         val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
+        // Categorize tasks into urgency tiers
+        val tier7Days = mutableListOf<com.lomigoo.classworkmanager.data.Classwork>()
+        val tier3Days = mutableListOf<com.lomigoo.classworkmanager.data.Classwork>()
+        val tier24Hours = mutableListOf<com.lomigoo.classworkmanager.data.Classwork>()
+
         classworks.forEach { task ->
             try {
                 val targetDate = LocalDate.parse(task.dateTarget, formatter)
-
-                val message = when (ChronoUnit.DAYS.between(today, targetDate)) {
-                    7L -> "I see you're taking your time, remember your task ${task.courseName} is due to ${task.dateTarget}"
-                    3L -> "You're gonna get cooked if you dont do this task ${task.courseName}, its due at ${task.dateTarget}!"
-                    1L -> "Batman's not gonna help you through this, your task ${task.courseName} is now due at ${task.dateTarget}!"
-                    else -> null
-                }
-
-                message?.let {
-                    notificationHelper.showNotification(
-                        id = task.id,
-                        title = "Deadline Reminder",
-                        message = it
-                    )
+                when (ChronoUnit.DAYS.between(today, targetDate)) {
+                    7L -> tier7Days.add(task)
+                    3L -> tier3Days.add(task)
+                    1L -> tier24Hours.add(task)
                 }
             } catch (_: Exception) {
-                // Ignore parsing errors for individual tasks
+                // Ignore parsing errors
             }
         }
 
+        // Send notifications for each tier (exactly one per tier)
+        sendTierNotification(
+            notificationHelper,
+            NotificationHelper.ID_7_DAYS,
+            tier7Days,
+            "I see you're taking your time, remember your task %s is due to %s",
+            "I see you're taking your time! You have %d tasks due in a week!"
+        )
+
+        sendTierNotification(
+            notificationHelper,
+            NotificationHelper.ID_3_DAYS,
+            tier3Days,
+            "You're gonna get cooked if you dont do this task %s, its due at %s!",
+            "You're gonna get cooked! You have %d tasks due in 3 days!"
+        )
+
+        sendTierNotification(
+            notificationHelper,
+            NotificationHelper.ID_24_HOURS,
+            tier24Hours,
+            "Batman's not gonna help you through this, your task %s is now due at %s!",
+            "Batman's not gonna help you through this! You have %d tasks due tomorrow!"
+        )
+
         return Result.success()
+    }
+
+    private fun sendTierNotification(
+        helper: NotificationHelper,
+        id: Int,
+        tasks: List<com.lomigoo.classworkmanager.data.Classwork>,
+        singleMessageTemplate: String,
+        summaryMessageTemplate: String
+    ) {
+        if (tasks.isEmpty()) return
+
+        val message = if (tasks.size == 1) {
+            val task = tasks[0]
+            singleMessageTemplate.format(task.courseName, task.dateTarget)
+        } else {
+            summaryMessageTemplate.format(tasks.size)
+        }
+
+        helper.showNotification(
+            id = id,
+            title = "Deadline Reminder",
+            message = message
+        )
     }
 }

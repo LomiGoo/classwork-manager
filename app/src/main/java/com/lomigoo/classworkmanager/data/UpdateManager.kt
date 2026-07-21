@@ -24,10 +24,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
 
-class UpdateManager(private val context: Context) {
+class UpdateManager(private val context: Context, private val appPreferences: AppPreferences) {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
-    private val sharedPrefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
     companion object {
         private const val TAG = "UpdateManager"
@@ -36,7 +35,7 @@ class UpdateManager(private val context: Context) {
     suspend fun checkForUpdates(): UpdateInfo = withContext(Dispatchers.IO) {
         val currentVersion = getCurrentVersion()
         val releases = fetchReleases()
-        val lastSeenVersion = sharedPrefs.getString("last_seen_version", "0.0.0") ?: "0.0.0"
+        val lastSeenVersion = appPreferences.getLastSeenVersion()
 
         val latestRelease = releases.firstOrNull { !it.preRelease && !it.draft }
 
@@ -69,7 +68,7 @@ class UpdateManager(private val context: Context) {
     }
 
     fun markVersionAsSeen(version: String) {
-        sharedPrefs.edit().putString("last_seen_version", version).apply()
+        appPreferences.setLastSeenVersion(version)
     }
 
     fun downloadAndInstallApk(url: String): Flow<Int> = callbackFlow {
