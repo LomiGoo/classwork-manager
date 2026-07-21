@@ -40,6 +40,9 @@ class ClassworkViewModel(
     private val _dateFormat = MutableStateFlow(appPreferences.getDateFormat())
     val dateFormat: StateFlow<String> = _dateFormat.asStateFlow()
 
+    private val _selectedTheme = MutableStateFlow(appPreferences.getTheme())
+    val selectedTheme: StateFlow<String> = _selectedTheme.asStateFlow()
+
     private val _whatsNewInfo = MutableStateFlow<UpdateInfo?>(null)
     val whatsNewInfo: StateFlow<UpdateInfo?> = _whatsNewInfo.asStateFlow()
 
@@ -111,6 +114,11 @@ class ClassworkViewModel(
     fun setDateFormat(format: String) {
         _dateFormat.value = format
         appPreferences.setDateFormat(format)
+    }
+
+    fun setTheme(themeId: String) {
+        _selectedTheme.value = themeId
+        appPreferences.setTheme(themeId)
     }
 
     fun createClasswork(course: String, action: String, target: String) {

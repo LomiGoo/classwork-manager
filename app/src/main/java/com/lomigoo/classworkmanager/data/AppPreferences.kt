@@ -12,9 +12,16 @@ class AppPreferences(context: Context) {
         private const val KEY_DATE_FORMAT = "date_format"
         private const val KEY_LAST_SEEN_VERSION = "last_seen_version"
         private const val KEY_LAST_SCHEDULED_DATE = "last_scheduled_date"
+        private const val KEY_THEME = "app_theme"
 
         const val FORMAT_NUMBERED = "NUMBERED" // yyyy-MM-dd
         const val FORMAT_READABLE = "READABLE" // February 1, 2026
+
+        const val THEME_JRU = "JRU"
+        const val THEME_EMERALD = "EMERALD"
+        const val THEME_CRIMSON = "CRIMSON"
+        const val THEME_AMETHYST = "AMETHYST"
+        const val THEME_NEUTRAL = "NEUTRAL"
     }
 
     fun isDarkMode(): Boolean = sharedPrefs.getBoolean(KEY_DARK_MODE, false)
@@ -39,5 +46,11 @@ class AppPreferences(context: Context) {
 
     fun setLastScheduledDate(date: String) {
         sharedPrefs.edit().putString(KEY_LAST_SCHEDULED_DATE, date).apply()
+    }
+
+    fun getTheme(): String = sharedPrefs.getString(KEY_THEME, THEME_JRU) ?: THEME_JRU
+
+    fun setTheme(theme: String) {
+        sharedPrefs.edit().putString(KEY_THEME, theme).apply()
     }
 }

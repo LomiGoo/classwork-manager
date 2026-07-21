@@ -47,8 +47,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val isDarkMode by viewModel.isDarkMode.collectAsState()
+            val selectedTheme by viewModel.selectedTheme.collectAsState()
 
-            ClassworkManagerTheme(darkTheme = isDarkMode) {
+            ClassworkManagerTheme(darkTheme = isDarkMode, selectedTheme = selectedTheme) {
                 ClassworkApp(viewModel)
             }
         }
