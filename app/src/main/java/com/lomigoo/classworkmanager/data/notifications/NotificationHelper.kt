@@ -14,6 +14,11 @@ class NotificationHelper(private val context: Context) {
     companion object {
         const val CHANNEL_ID = "deadline_reminders"
         const val CHANNEL_NAME = "Deadline Reminders"
+
+        // Fixed IDs for urgency tiers to prevent flooding
+        const val ID_7_DAYS = 700
+        const val ID_3_DAYS = 300
+        const val ID_24_HOURS = 100
     }
 
     init {

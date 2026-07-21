@@ -14,9 +14,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.lomigoo.classworkmanager.data.AppPreferences
 import com.lomigoo.classworkmanager.data.ClassworkDbHelper
-import com.lomigoo.classworkmanager.data.ThemePreference
 import com.lomigoo.classworkmanager.data.UpdateManager
+import com.lomigoo.classworkmanager.data.notifications.NotificationOrchestrator
+import com.lomigoo.classworkmanager.data.notifications.NotificationScheduler
 import com.lomigoo.classworkmanager.data.notifications.NotificationWorker
 import com.lomigoo.classworkmanager.ui.ClassworkApp
 import com.lomigoo.classworkmanager.ui.ClassworkViewModel
@@ -37,10 +39,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val appPreferences = AppPreferences(applicationContext)
         val dbHelper = ClassworkDbHelper(applicationContext)
-        val updateManager = UpdateManager(applicationContext)
-        val themePreference = ThemePreference(applicationContext)
-        val factory = ClassworkViewModelFactory(dbHelper, updateManager, themePreference)
+        val updateManager = UpdateManager(applicationContext, appPreferences)
+        val factory = ClassworkViewModelFactory(dbHelper, updateManager, appPreferences)
         val viewModel = ViewModelProvider(this, factory).get(ClassworkViewModel::class.java)
 
         setContent {
@@ -71,29 +73,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun scheduleDeadlineChecks() {
+        // 1. Immediate check/schedule for today
+        NotificationScheduler.scheduleDailyReminders(applicationContext)
+
+        // 2. Schedule a daily orchestrator to plan the next day
         val manilaZone = ZoneId.of("Asia/Manila")
         val now = LocalDateTime.now(manilaZone)
-        
-        // Target times: 6 AM and 6 PM
-        val target6AM = now.with(LocalTime.of(6, 0))
-        val target6PM = now.with(LocalTime.of(18, 0))
+        val midnight = now.toLocalDate().plusDays(1).atStartOfDay()
+        val initialDelay = Duration.between(now, midnight).toMinutes()
 
-        val nextRun = when {
-            now.isBefore(target6AM) -> target6AM
-            now.isBefore(target6PM) -> target6PM
-            else -> target6AM.plusDays(1)
-        }
-
-        val initialDelay = Duration.between(now, nextRun).toMinutes()
-
-        val workRequest = PeriodicWorkRequestBuilder<NotificationWorker>(12, TimeUnit.HOURS)
+        val orchestratorRequest = PeriodicWorkRequestBuilder<NotificationOrchestrator>(24, TimeUnit.HOURS)
             .setInitialDelay(initialDelay, TimeUnit.MINUTES)
             .build()
 
         WorkManager.getInstance(applicationContext).enqueueUniquePeriodicWork(
-            "DeadlineCheckWork",
+            "DailyNotificationOrchestrator",
             ExistingPeriodicWorkPolicy.REPLACE,
-            workRequest
+            orchestratorRequest
         )
     }
 }
