@@ -43,6 +43,16 @@ class ClassworkViewModel(
     private val _selectedTheme = MutableStateFlow(appPreferences.getTheme())
     val selectedTheme: StateFlow<String> = _selectedTheme.asStateFlow()
 
+    private val _isHistoryLoaded = MutableStateFlow(false)
+    val isHistoryLoaded: StateFlow<Boolean> = _isHistoryLoaded.asStateFlow()
+
+    // History Filters
+    private val _historyYearFilter = MutableStateFlow("All")
+    val historyYearFilter: StateFlow<String> = _historyYearFilter.asStateFlow()
+
+    private val _historyMonthFilter = MutableStateFlow("All")
+    val historyMonthFilter: StateFlow<String> = _historyMonthFilter.asStateFlow()
+
     private val _whatsNewInfo = MutableStateFlow<UpdateInfo?>(null)
     val whatsNewInfo: StateFlow<UpdateInfo?> = _whatsNewInfo.asStateFlow()
 
@@ -119,6 +129,22 @@ class ClassworkViewModel(
     fun setTheme(themeId: String) {
         _selectedTheme.value = themeId
         appPreferences.setTheme(themeId)
+    }
+
+    fun setHistoryYearFilter(year: String) {
+        _historyYearFilter.value = year
+    }
+
+    fun setHistoryMonthFilter(month: String) {
+        _historyMonthFilter.value = month
+    }
+
+    fun loadHistory() {
+        _isHistoryLoaded.value = true
+    }
+
+    fun unloadHistory() {
+        _isHistoryLoaded.value = false
     }
 
     fun createClasswork(course: String, action: String, target: String) {

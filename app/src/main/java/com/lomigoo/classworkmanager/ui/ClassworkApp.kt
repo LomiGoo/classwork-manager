@@ -6,19 +6,15 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Announcement
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Public
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +23,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,8 +49,14 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val dateFormat by viewModel.dateFormat.collectAsState()
     val selectedTheme by viewModel.selectedTheme.collectAsState()
+    val historyYearFilter by viewModel.historyYearFilter.collectAsState()
+    val historyMonthFilter by viewModel.historyMonthFilter.collectAsState()
+    val isHistoryLoaded by viewModel.isHistoryLoaded.collectAsState()
 
-    var currentFilter by remember { mutableStateOf("All") }
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(pageCount = { 3 })
+    val tabs = listOf("Pending", "Done", "History")
+
     var currentSortOrder by remember { mutableStateOf("Created Date") }
     var isAscending by remember { mutableStateOf(value = false) }
     var showSortMenu by remember { mutableStateOf(value = false) }
@@ -68,6 +71,13 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
 
     val uriHandler = LocalUriHandler.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Auto-unload history when navigating away from the History tab (index 2)
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != 2) {
+            viewModel.unloadHistory()
+        }
+    }
 
     fun formatDateForDisplay(dateString: String): String {
         return try {
@@ -101,159 +111,174 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
         }
     }
 
-    val processedClassworks = remember(rawClassworks, currentFilter, currentSortOrder, isAscending) {
-        val filtered = when (currentFilter) {
-            "Pending" -> rawClassworks.filter { !it.isCompleted }
-            "Done" -> rawClassworks.filter { it.isCompleted }
-            else -> rawClassworks
-        }
+    val allPending = remember(rawClassworks) { rawClassworks.filter { !it.isCompleted } }
+    val allDone = remember(rawClassworks) { rawClassworks.filter { it.isCompleted } }
 
+    // Batch logic: Reset Done tab after every 10 tasks
+    val batchCount = remember(allDone) { if (allDone.isEmpty()) 0 else (allDone.size - 1) % 10 + 1 }
+    val recentDone = remember(allDone, batchCount) { allDone.take(batchCount) }
+    val historyPool = remember(allDone, batchCount) { allDone.drop(batchCount) }
+
+    fun sortList(list: List<Classwork>): List<Classwork> {
         val sorted = when (currentSortOrder) {
-            "Course Name" -> filtered.sortedBy { it.courseName.lowercase() }
-            "Target Date" -> filtered.sortedBy { it.dateTarget.lowercase() }
-            else -> filtered.sortedBy { it.id }
+            "Course Name" -> list.sortedBy { it.courseName.lowercase() }
+            "Target Date" -> list.sortedBy { it.dateTarget.lowercase() }
+            else -> list.sortedBy { it.id }
         }
-
-        if (isAscending) sorted else sorted.reversed()
+        return if (isAscending) sorted else sorted.reversed()
     }
 
+    val filteredHistory = remember(historyPool, historyYearFilter, historyMonthFilter) {
+        historyPool.filter { task ->
+            val date = LocalDate.parse(task.dateCreated)
+            val yearMatch = historyYearFilter == "All" || date.year.toString() == historyYearFilter
+            val monthMatch = historyMonthFilter == "All" || date.monthValue.toString() == historyMonthFilter
+            yearMatch && monthMatch
+        }
+    }
+
+    val pendingToDisplay = remember(allPending, currentSortOrder, isAscending) { sortList(allPending) }
+    val doneToDisplay = remember(recentDone, currentSortOrder, isAscending) { sortList(recentDone) }
+    val historyToDisplay = remember(filteredHistory, currentSortOrder, isAscending) { sortList(filteredHistory) }
+
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { 
-                    Text(
-                        text = "Classwork Manager",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    ) 
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                actions = {
-                    // Notification Bell
-                    IconButton(onClick = {
-                        if (updateInfo?.isUpdateAvailable == true) {
-                            showUpdateOptions = true
-                        } else if (updateInfo?.isWhatsNewAvailable == true) {
-                            viewModel.showWhatsNew()
-                        } else {
-                            showNoUpdatesDialog = true
-                        }
-                    }) {
-                        BadgedBox(
-                            badge = {
-                                if (updateInfo?.isUpdateAvailable == true) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
-                                        Text("!", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+            Column {
+                TopAppBar(
+                    title = { 
+                        Text(
+                            text = "Classwork Manager",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        ) 
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                        actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    actions = {
+                        // Notification Bell
+                        IconButton(onClick = {
+                            if (updateInfo?.isUpdateAvailable == true) {
+                                showUpdateOptions = true
+                            } else if (updateInfo?.isWhatsNewAvailable == true) {
+                                viewModel.showWhatsNew()
+                            } else {
+                                showNoUpdatesDialog = true
+                            }
+                        }) {
+                            BadgedBox(
+                                badge = {
+                                    if (updateInfo?.isUpdateAvailable == true) {
+                                        Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                            Text("!", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Updates"
+                                )
                             }
-                        ) {
+                        }
+
+                        IconButton(onClick = { viewModel.toggleDarkMode() }) {
                             Icon(
-                                imageVector = Icons.Default.Notifications,
-                                contentDescription = "Updates"
+                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = "Toggle Theme"
                             )
                         }
-                    }
 
-                    IconButton(onClick = { viewModel.toggleDarkMode() }) {
-                        Icon(
-                            imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = "Toggle Theme"
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                            }
+                            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Sort by Date Created") },
+                                    onClick = { currentSortOrder = "Created Date"; showSortMenu = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Sort by Course Name") },
+                                    onClick = { currentSortOrder = "Course Name"; showSortMenu = false }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Sort by Target Date") },
+                                    onClick = { currentSortOrder = "Target Date"; showSortMenu = false }
+                                )
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(if (isAscending) "Order: Ascending" else "Order: Descending") },
+                                    onClick = { isAscending = !isAscending; showSortMenu = false },
+                                    trailingIcon = { Text(if (isAscending) "↑" else "↓") }
+                                )
+                            }
+                        }
+
+                        IconButton(onClick = { showSettings = true }) {
+                            Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    }
+                )
+
+                SecondaryTabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    indicator = { 
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(pagerState.currentPage),
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
-
-                    Box {
-                        IconButton(onClick = { showSortMenu = true }) {
-                            Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Sort by Date Created") },
-                                onClick = { currentSortOrder = "Created Date"; showSortMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Sort by Course Name") },
-                                onClick = { currentSortOrder = "Course Name"; showSortMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Sort by Target Date") },
-                                onClick = { currentSortOrder = "Target Date"; showSortMenu = false }
-                            )
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(if (isAscending) "Order: Ascending" else "Order: Descending") },
-                                onClick = { isAscending = !isAscending; showSortMenu = false },
-                                trailingIcon = { Text(if (isAscending) "↑" else "↓") }
-                            )
-                        }
-                    }
-
-                    IconButton(onClick = { showSettings = true }) {
-                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
+                ) {
+                    tabs.forEachIndexed { index, title ->
+                        Tab(
+                            selected = pagerState.currentPage == index,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            text = { 
+                                Text(
+                                    text = title, 
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal
+                                ) 
+                            },
+                            selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                            unselectedContentColor = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                        )
                     }
                 }
-            )
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
+            if (pagerState.currentPage == 0) { // Only show FAB in Pending tab
+                FloatingActionButton(onClick = { showAddDialog = true }) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = "Add Task")
+                }
             }
         }
     ) { padding ->
         Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf("All", "Pending", "Done").forEach { filter ->
-                    FilterChip(
-                        selected = currentFilter == filter,
-                        onClick = { currentFilter = filter },
-                        label = { Text(filter) },
-                        shape = RoundedCornerShape(4.dp)
-                    )
-                }
-            }
-
             Text(
                 text = "Sorted by: $currentSortOrder (${if (isAscending) "ASC" else "DESC"})",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             )
 
-            LazyColumn(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp).weight(1f)) {
-                if (processedClassworks.isEmpty()) {
-                    item {
-                        Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                            Text(
-                                text = if (currentFilter == "All") "No classwork found. Tap + to create one!"
-                                else "No tasks fit the criteria: $currentFilter",
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                        }
-                    }
-                } else {
-                    items(processedClassworks.size) { index ->
-                        val item = processedClassworks[index]
-                        ClassworkCard(
-                            classwork = item,
-                            onToggleStatus = {
-                                viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
-                            },
-                            onEdit = { classworkToEdit = item },
-                            onDelete = { classworkToDelete = item },
-                            formatDate = { formatDateForDisplay(it) }
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                verticalAlignment = Alignment.Top
+            ) { pageIndex ->
+                when (pageIndex) {
+                    0 -> TaskListPage(pendingToDisplay, "No pending tasks. Great job!", viewModel, { classworkToEdit = it }, { classworkToDelete = it }, { formatDateForDisplay(it) })
+                    1 -> TaskListPage(doneToDisplay, "No recently completed tasks.", viewModel, { classworkToEdit = it }, { classworkToDelete = it }, { formatDateForDisplay(it) })
+                    2 -> HistoryPage(historyToDisplay, historyPool, viewModel, { classworkToEdit = it }, { classworkToDelete = it }, { formatDateForDisplay(it) })
                 }
             }
         }
@@ -626,18 +651,149 @@ fun ThemeCircle(
 }
 
 @Composable
+fun TaskListPage(
+    tasks: List<Classwork>,
+    emptyMessage: String,
+    viewModel: ClassworkViewModel,
+    onEdit: (Classwork) -> Unit,
+    onDelete: (Classwork) -> Unit,
+    formatDate: (String) -> String,
+    isEditable: Boolean = true
+) {
+    LazyColumn(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp).fillMaxSize()) {
+        if (tasks.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                    Text(text = emptyMessage, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                }
+            }
+        } else {
+            items(tasks.size) { index ->
+                val item = tasks[index]
+                ClassworkCard(
+                    classwork = item,
+                    onToggleStatus = { viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted)) },
+                    onEdit = { onEdit(item) },
+                    onDelete = { onDelete(item) },
+                    formatDate = formatDate,
+                    isEditable = isEditable
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryPage(
+    tasks: List<Classwork>,
+    allHistory: List<Classwork>,
+    viewModel: ClassworkViewModel,
+    onEdit: (Classwork) -> Unit,
+    onDelete: (Classwork) -> Unit,
+    formatDate: (String) -> String
+) {
+    val yearFilter by viewModel.historyYearFilter.collectAsState()
+    val monthFilter by viewModel.historyMonthFilter.collectAsState()
+    val isHistoryLoaded by viewModel.isHistoryLoaded.collectAsState()
+
+    if (!isHistoryLoaded) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Button(onClick = { viewModel.loadHistory() }) {
+                Icon(Icons.Default.History, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Load History Archive")
+            }
+        }
+    } else {
+        val availableYears = remember(allHistory) {
+            listOf("All") + allHistory.map { LocalDate.parse(it.dateCreated).year.toString() }.distinct().sortedDescending()
+        }
+        val months = listOf("All") + (1..12).map { it.toString() }
+
+        var yearDropdownExpanded by remember { mutableStateOf(false) }
+        var monthDropdownExpanded by remember { mutableStateOf(false) }
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Year Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = yearDropdownExpanded,
+                    onExpandedChange = { yearDropdownExpanded = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = if (yearFilter == "All") "Year: All" else yearFilter,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Year") },
+                        modifier = Modifier.menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = yearDropdownExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        shape = MaterialTheme.shapes.small,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    ExposedDropdownMenu(expanded = yearDropdownExpanded, onDismissRequest = { yearDropdownExpanded = false }) {
+                        availableYears.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text(year) },
+                                onClick = { viewModel.setHistoryYearFilter(year); yearDropdownExpanded = false }
+                            )
+                        }
+                    }
+                }
+
+                // Month Dropdown
+                ExposedDropdownMenuBox(
+                    expanded = monthDropdownExpanded,
+                    onExpandedChange = { monthDropdownExpanded = it },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = if (monthFilter == "All") "Month: All" else monthFilter,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Month") },
+                        modifier = Modifier.menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = monthDropdownExpanded) },
+                        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                        shape = MaterialTheme.shapes.small,
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    ExposedDropdownMenu(expanded = monthDropdownExpanded, onDismissRequest = { monthDropdownExpanded = false }) {
+                        months.forEach { month ->
+                            DropdownMenuItem(
+                                text = { Text(if (month == "All") "All" else java.time.Month.of(month.toInt()).name) },
+                                onClick = { viewModel.setHistoryMonthFilter(month); monthDropdownExpanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+
+            TaskListPage(tasks, "No archived tasks match your filters.", viewModel, onEdit, onDelete, formatDate, isEditable = false)
+        }
+    }
+}
+
+@Composable
 fun ClassworkCard(
     classwork: Classwork,
     onToggleStatus: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    formatDate: (String) -> String
+    formatDate: (String) -> String,
+    isEditable: Boolean = true
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
-            .clickable { onToggleStatus() },
+            .then(if (isEditable) Modifier.clickable { onToggleStatus() } else Modifier),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
@@ -656,7 +812,8 @@ fun ClassworkCard(
                 ) {
                     Checkbox(
                         checked = classwork.isCompleted,
-                        onCheckedChange = { onToggleStatus() },
+                        onCheckedChange = { if (isEditable) onToggleStatus() },
+                        enabled = isEditable, // Disable checkbox in history
                         modifier = Modifier.size(24.dp).padding(end = 4.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -701,21 +858,23 @@ fun ClassworkCard(
                     modifier = Modifier.padding(start = 32.dp)
                 )
 
-                Row {
-                    TextButton(
-                        onClick = onEdit,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text("EDIT", fontWeight = FontWeight.Normal, fontSize = 12.sp) // Reduced from Bold
-                    }
-                    TextButton(
-                        onClick = onDelete,
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text("DELETE", fontWeight = FontWeight.Normal, fontSize = 12.sp) // Reduced from Bold
+                if (isEditable) {
+                    Row {
+                        TextButton(
+                            onClick = onEdit,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("EDIT", fontWeight = FontWeight.Normal, fontSize = 12.sp)
+                        }
+                        TextButton(
+                            onClick = onDelete,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("DELETE", fontWeight = FontWeight.Normal, fontSize = 12.sp)
+                        }
                     }
                 }
             }
