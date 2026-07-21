@@ -32,13 +32,16 @@ object NotificationScheduler {
         val workManager = WorkManager.getInstance(context)
 
         // Morning Window: 06:00 - 12:00
-        scheduleRandomWork(workManager, "MORNING", 6, 12, now)
+        scheduleRandomWork(workManager, "MORNING", 6, 11, now)
 
-        // Night Window: 18:00 - 23:59
+        // Afternoon Window: 12:00 - 18:00
+        scheduleRandomWork(workManager, "AFTERNOON", 12, 17, now)
+
+        // Night Window: 18:00 - 23:30 (to allow for +30min)
         scheduleRandomWork(workManager, "NIGHT", 18, 23, now)
 
         prefs.setLastScheduledDate(todayStr)
-        Log.d(TAG, "Successfully scheduled 2 morning and 2 night reminders for $todayStr")
+        Log.d(TAG, "Successfully scheduled 6 daily reminders (2 per window) for $todayStr")
     }
 
     private fun scheduleRandomWork(
@@ -50,14 +53,15 @@ object NotificationScheduler {
     ) {
         val today = now.toLocalDate()
         
-        // Pick 2 random times in the window
-        val randomTimes = List(2) {
-            val hour = Random.nextInt(startHour, endHour + 1)
-            val minute = if (hour == endHour) 0 else Random.nextInt(0, 60)
-            LocalTime.of(hour, minute)
-        }.sorted()
+        // Pick 1 random starting time in the window
+        val randomHour = Random.nextInt(startHour, endHour + 1)
+        // If it's the last hour, limit minutes to 0-30 so the second notify stays in window/day
+        val maxMinute = if (randomHour == endHour && endHour == 23) 29 else 59
+        val randomMinute = Random.nextInt(0, maxMinute + 1)
+        val firstTime = LocalTime.of(randomHour, randomMinute)
+        val secondTime = firstTime.plusMinutes(30)
 
-        randomTimes.forEachIndexed { index, time ->
+        listOf(firstTime, secondTime).forEachIndexed { index, time ->
             val scheduledTime = today.atTime(time)
             
             if (scheduledTime.isAfter(now)) {

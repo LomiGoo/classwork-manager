@@ -1,5 +1,6 @@
 package com.lomigoo.classworkmanager.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -12,8 +13,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Announcement
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.lomigoo.classworkmanager.R
 import com.lomigoo.classworkmanager.data.AppPreferences
 import com.lomigoo.classworkmanager.data.Classwork
@@ -46,10 +51,11 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     val isCheckingUpdates by viewModel.isCheckingUpdates.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val dateFormat by viewModel.dateFormat.collectAsState()
+    val selectedTheme by viewModel.selectedTheme.collectAsState()
 
     var currentFilter by remember { mutableStateOf("All") }
     var currentSortOrder by remember { mutableStateOf("Created Date") }
-    var isAscending by remember { mutableStateOf(value = false) } // Default to Descending for Created Date
+    var isAscending by remember { mutableStateOf(value = false) }
     var showSortMenu by remember { mutableStateOf(value = false) }
 
     var showAddDialog by remember { mutableStateOf(value = false) }
@@ -58,6 +64,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
     var showSettings by remember { mutableStateOf(value = false) }
     var showUpdateOptions by remember { mutableStateOf(value = false) }
     var showNoUpdatesDialog by remember { mutableStateOf(value = false) }
+    var dateDropdownExpanded by remember { mutableStateOf(false) }
 
     val uriHandler = LocalUriHandler.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -104,7 +111,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
         val sorted = when (currentSortOrder) {
             "Course Name" -> filtered.sortedBy { it.courseName.lowercase() }
             "Target Date" -> filtered.sortedBy { it.dateTarget.lowercase() }
-            else -> filtered.sortedBy { it.id } // Sort by ID (Creation order)
+            else -> filtered.sortedBy { it.id }
         }
 
         if (isAscending) sorted else sorted.reversed()
@@ -114,15 +121,52 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Classwork Manager") },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                title = { 
+                    Text(
+                        text = "Classwork Manager",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
+                ),
                 actions = {
+                    // Notification Bell
+                    IconButton(onClick = {
+                        if (updateInfo?.isUpdateAvailable == true) {
+                            showUpdateOptions = true
+                        } else if (updateInfo?.isWhatsNewAvailable == true) {
+                            viewModel.showWhatsNew()
+                        } else {
+                            showNoUpdatesDialog = true
+                        }
+                    }) {
+                        BadgedBox(
+                            badge = {
+                                if (updateInfo?.isUpdateAvailable == true) {
+                                    Badge(containerColor = MaterialTheme.colorScheme.error) {
+                                        Text("!", color = MaterialTheme.colorScheme.onError, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = "Updates"
+                            )
+                        }
+                    }
+
                     IconButton(onClick = { viewModel.toggleDarkMode() }) {
                         Icon(
                             imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Toggle Theme"
                         )
                     }
+
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
                             Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
@@ -148,6 +192,7 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
                             )
                         }
                     }
+
                     IconButton(onClick = { showSettings = true }) {
                         Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -160,94 +205,60 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
             }
         }
     ) { padding ->
-        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("All", "Pending", "Done").forEach { filter ->
-                        FilterChip(
-                            selected = currentFilter == filter,
-                            onClick = { currentFilter = filter },
-                            label = { Text(filter) },
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Sorted by: $currentSortOrder (${if (isAscending) "ASC" else "DESC"})",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-                )
-
-                LazyColumn(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).weight(1f)) {
-                    if (processedClassworks.isEmpty()) {
-                        item {
-                            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = if (currentFilter == "All") "No classwork found. Tap + to create one!"
-                                    else "No tasks fit the criteria: $currentFilter",
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                    } else {
-                        items(processedClassworks.size) { index ->
-                            val item = processedClassworks[index]
-                            ClassworkCard(
-                                classwork = item,
-                                onToggleStatus = {
-                                    viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
-                                },
-                                onEdit = { classworkToEdit = item },
-                                onDelete = { classworkToDelete = item },
-                                formatDate = { formatDateForDisplay(it) }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                        }
-                    }
+        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf("All", "Pending", "Done").forEach { filter ->
+                    FilterChip(
+                        selected = currentFilter == filter,
+                        onClick = { currentFilter = filter },
+                        label = { Text(filter) },
+                        shape = RoundedCornerShape(4.dp)
+                    )
                 }
             }
 
-            // Floating "What's New" / Update Notice (Bottom Left)
-            SmallFloatingActionButton(
-                onClick = {
-                    if (updateInfo?.isUpdateAvailable == true) {
-                        showUpdateOptions = true
-                    } else if (updateInfo?.isWhatsNewAvailable == true) {
-                        viewModel.showWhatsNew()
-                    } else {
-                        showNoUpdatesDialog = true
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(16.dp),
-                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-            ) {
-                BadgedBox(
-                    badge = {
-                        if (updateInfo?.isUpdateAvailable == true) {
-                            Badge(containerColor = Color.Red) {
-                                Text("!", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+            Text(
+                text = "Sorted by: $currentSortOrder (${if (isAscending) "ASC" else "DESC"})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+            )
+
+            LazyColumn(modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp).weight(1f)) {
+                if (processedClassworks.isEmpty()) {
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (currentFilter == "All") "No classwork found. Tap + to create one!"
+                                else "No tasks fit the criteria: $currentFilter",
+                                style = MaterialTheme.typography.bodyLarge
+                            )
                         }
                     }
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Announcement,
-                        contentDescription = "Updates"
-                    )
+                } else {
+                    items(processedClassworks.size) { index ->
+                        val item = processedClassworks[index]
+                        ClassworkCard(
+                            classwork = item,
+                            onToggleStatus = {
+                                viewModel.updateClasswork(item.copy(isCompleted = !item.isCompleted))
+                            },
+                            onEdit = { classworkToEdit = item },
+                            onDelete = { classworkToDelete = item },
+                            formatDate = { formatDateForDisplay(it) }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
                 }
             }
         }
 
+        // Dialogs
         if (showNoUpdatesDialog) {
             AlertDialog(
                 onDismissRequest = { showNoUpdatesDialog = false },
@@ -345,11 +356,16 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
             AlertDialog(
                 onDismissRequest = { viewModel.dismissWhatsNew() },
                 title = {
-                    Text(
-                        text = info.releaseName ?: "What's New",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = info.releaseName ?: "What's New",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 },
                 text = {
                     Column(
@@ -378,26 +394,86 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
         if (showSettings) {
             AlertDialog(
                 onDismissRequest = { showSettings = false },
-                title = { Text("Settings & App Info") },
+                title = { Text("Settings & App Info", style = MaterialTheme.typography.titleLarge) },
                 text = {
                     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text("Preferences", style = MaterialTheme.typography.titleMedium)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text("Date Format", style = MaterialTheme.typography.labelLarge)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = dateFormat == AppPreferences.FORMAT_NUMBERED,
-                                onClick = { viewModel.setDateFormat(AppPreferences.FORMAT_NUMBERED) }
-                            )
-                            Text("Numbered (2026-02-01)")
+                        Text("Preferences", 
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // App Theme Box
+                        Text("App Theme", style = MaterialTheme.typography.labelLarge)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = MaterialTheme.shapes.small,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                listOf(
+                                    AppPreferences.THEME_NEUTRAL to Color(0xFF475569),
+                                    AppPreferences.THEME_JRU to Color(0xFF0056D2),
+                                    AppPreferences.THEME_EMERALD to Color(0xFF059669),
+                                    AppPreferences.THEME_CRIMSON to Color(0xFFDC2626),
+                                    AppPreferences.THEME_AMETHYST to Color(0xFF7C3AED)
+                                ).forEach { (id, color) ->
+                                    ThemeCircle(
+                                        color = color,
+                                        isSelected = selectedTheme == id,
+                                        onClick = { viewModel.setTheme(id) }
+                                    )
+                                }
+                            }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = dateFormat == AppPreferences.FORMAT_READABLE,
-                                onClick = { viewModel.setDateFormat(AppPreferences.FORMAT_READABLE) }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        // Date Format Choice Box (Exposed Dropdown)
+                        Text("Date Format", style = MaterialTheme.typography.labelLarge)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        ExposedDropdownMenuBox(
+                            expanded = dateDropdownExpanded,
+                            onExpandedChange = { dateDropdownExpanded = it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = if (dateFormat == AppPreferences.FORMAT_READABLE) "Readable (February 1, 2026)" else "Numbered (2026-02-01)",
+                                onValueChange = {},
+                                readOnly = true,
+                                modifier = Modifier.menuAnchor(type = ExposedDropdownMenuAnchorType.PrimaryNotEditable, enabled = true).fillMaxWidth(),
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dateDropdownExpanded) },
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                shape = MaterialTheme.shapes.small
                             )
-                            Text("Readable (February 1, 2026)")
+                            ExposedDropdownMenu(
+                                expanded = dateDropdownExpanded,
+                                onDismissRequest = { dateDropdownExpanded = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("Numbered (2026-02-01)", style = MaterialTheme.typography.bodyMedium) },
+                                    onClick = {
+                                        viewModel.setDateFormat(AppPreferences.FORMAT_NUMBERED)
+                                        dateDropdownExpanded = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Readable (February 1, 2026)", style = MaterialTheme.typography.bodyMedium) },
+                                    onClick = {
+                                        viewModel.setDateFormat(AppPreferences.FORMAT_READABLE)
+                                        dateDropdownExpanded = false
+                                    }
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -419,38 +495,65 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        Text("GitHub:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Public,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("GitHub:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable { uriHandler.openUri("https://github.com/LomiGoo") },
                         )
 
-                        Text("Source Code:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Code,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Source Code:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo/classwork-manager",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable {
                                     uriHandler.openUri("https://github.com/LomiGoo/classwork-manager")
                                 },
                         )
 
-                        Text("Release Application List:", style = MaterialTheme.typography.labelLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Announcement,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Release Application List:", style = MaterialTheme.typography.labelLarge)
+                        }
                         Text(
                             text = "github.com/LomiGoo/classwork-manager/releases",
                             color = Color.Blue,
                             textDecoration = TextDecoration.Underline,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier
-                                .padding(bottom = 8.dp)
+                                .padding(bottom = 12.dp)
                                 .clickable {
                                     uriHandler.openUri("https://github.com/LomiGoo/classwork-manager/releases")
                                 },
@@ -507,6 +610,22 @@ fun ClassworkApp(viewModel: ClassworkViewModel) {
 }
 
 @Composable
+fun ThemeCircle(
+    color: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .size(42.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(21.dp),
+        color = color,
+        border = if (isSelected) BorderStroke(3.dp, MaterialTheme.colorScheme.outline) else null
+    ) { }
+}
+
+@Composable
 fun ClassworkCard(
     classwork: Classwork,
     onToggleStatus: () -> Unit,
@@ -515,54 +634,89 @@ fun ClassworkCard(
     formatDate: (String) -> String
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onToggleStatus() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clickable { onToggleStatus() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth()
         ) {
-            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(
-                    checked = classwork.isCompleted,
-                    onCheckedChange = { onToggleStatus() },
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-
-                Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = classwork.isCompleted,
+                        onCheckedChange = { onToggleStatus() },
+                        modifier = Modifier.size(24.dp).padding(end = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = classwork.courseName,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.Bold, // Reduced from ExtraBold
                         style = MaterialTheme.typography.titleMedium,
-                        textDecoration = if (classwork.isCompleted) TextDecoration.LineThrough else TextDecoration.None
-                    )
-                    Text(
-                        text = classwork.actionDescription,
-                        style = MaterialTheme.typography.bodyLarge,
                         textDecoration = if (classwork.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
-                        color = if (classwork.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Target: ${formatDate(classwork.dateTarget)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Created: ${formatDate(classwork.dateCreated)}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
                     )
                 }
+
+                Text(
+                    text = formatDate(classwork.dateTarget),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (classwork.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.Medium // Reduced from Bold
+                )
             }
-            Row {
-                TextButton(onClick = onEdit) {
-                    Text("EDIT", fontWeight = FontWeight.Bold)
-                }
-                TextButton(onClick = onDelete) {
-                    Text("DELETE", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = classwork.actionDescription,
+                style = MaterialTheme.typography.bodyMedium,
+                textDecoration = if (classwork.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                color = if (classwork.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 32.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Added: ${formatDate(classwork.dateCreated)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 32.dp)
+                )
+
+                Row {
+                    TextButton(
+                        onClick = onEdit,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("EDIT", fontWeight = FontWeight.Normal, fontSize = 12.sp) // Reduced from Bold
+                    }
+                    TextButton(
+                        onClick = onDelete,
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("DELETE", fontWeight = FontWeight.Normal, fontSize = 12.sp) // Reduced from Bold
+                    }
                 }
             }
         }
@@ -600,7 +754,6 @@ fun ClassworkDialog(
         }
     )
 
-    // Interaction source to detect clicks on the read-only field
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
@@ -657,7 +810,7 @@ fun ClassworkDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = target,
-                    onValueChange = { /* Handled by DatePicker */ },
+                    onValueChange = { },
                     label = { Text("Target Date") },
                     modifier = Modifier.fillMaxWidth(),
                     readOnly = true,

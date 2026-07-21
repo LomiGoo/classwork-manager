@@ -4,31 +4,32 @@ import android.os.Build
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.lomigoo.classworkmanager.data.AppPreferences
 
-private val DarkColorScheme = darkColorScheme(
-    primary = JRU_Blue_Light,
-    secondary = JRU_Gold_Light,
-    tertiary = JRU_Gold_Light,
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = JRU_Blue,
-    secondary = JRU_Gold,
-    tertiary = JRU_Gold,
+// Sharp modern shapes
+private val SharpShapes = Shapes(
+    small = RoundedCornerShape(4.dp),
+    medium = RoundedCornerShape(6.dp),
+    large = RoundedCornerShape(8.dp)
 )
 
 @Composable
 fun ClassworkManagerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is disabled by default to keep JRU branding
+    selectedTheme: String = AppPreferences.THEME_NEUTRAL,
+    // Dynamic color is disabled by default to keep branding
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
@@ -37,9 +38,7 @@ fun ClassworkManagerTheme(
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else -> getThemeColorScheme(selectedTheme, darkTheme)
     }
 
     val colorScheme = animateColorScheme(targetColorScheme)
@@ -47,8 +46,90 @@ fun ClassworkManagerTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = SharpShapes,
         content = content,
     )
+}
+
+private fun getThemeColorScheme(themeId: String, isDark: Boolean): ColorScheme {
+    return if (isDark) {
+        val primary = when (themeId) {
+            AppPreferences.THEME_EMERALD -> Color(0xFF6EE7B7)
+            AppPreferences.THEME_CRIMSON -> Color(0xFFFCA5A5)
+            AppPreferences.THEME_AMETHYST -> Color(0xFFC4B5FD)
+            AppPreferences.THEME_NEUTRAL -> Color(0xFF94A3B8)
+            else -> Color(0xFFADC6FF) // JRU Blue Light
+        }
+        val secondary = when (themeId) {
+            AppPreferences.THEME_EMERALD -> Color(0xFFA7F3D0)
+            AppPreferences.THEME_CRIMSON -> Color(0xFFFDE047)
+            AppPreferences.THEME_AMETHYST -> Color(0xFFDDD6FE)
+            AppPreferences.THEME_NEUTRAL -> Color(0xFFCBD5E1)
+            else -> JRU_Gold_Light
+        }
+
+        darkColorScheme(
+            primary = primary,
+            onPrimary = Color(0xFF001D4D),
+            primaryContainer = Color(0xFF004494),
+            onPrimaryContainer = Color(0xFFD8E2FF),
+            secondary = secondary,
+            onSecondary = Color(0xFF451A03),
+            secondaryContainer = Color(0xFF78350F),
+            onSecondaryContainer = Color(0xFFFEF3C7),
+            background = Dark_Background,
+            onBackground = Color(0xFFF1F5F9), // Fix: direct color for stability
+            surface = Dark_Surface,
+            onSurface = Dark_OnSurface,
+            surfaceVariant = Dark_SurfaceVariant,
+            onSurfaceVariant = Dark_OnSurfaceVariant,
+            outline = Dark_Outline,
+            error = ErrorRed,
+            onError = OnErrorRed
+        )
+    } else {
+        val primary = when (themeId) {
+            AppPreferences.THEME_EMERALD -> Emerald_Primary
+            AppPreferences.THEME_CRIMSON -> Crimson_Primary
+            AppPreferences.THEME_AMETHYST -> Amethyst_Primary
+            AppPreferences.THEME_NEUTRAL -> Neutral_Primary
+            else -> JRU_Blue
+        }
+        val secondary = when (themeId) {
+            AppPreferences.THEME_EMERALD -> Emerald_Secondary
+            AppPreferences.THEME_CRIMSON -> Color(0xFFD97706)
+            AppPreferences.THEME_AMETHYST -> Amethyst_Secondary
+            AppPreferences.THEME_NEUTRAL -> Neutral_Secondary
+            else -> JRU_Gold
+        }
+        val container = when (themeId) {
+            AppPreferences.THEME_EMERALD -> Emerald_Light
+            AppPreferences.THEME_CRIMSON -> Crimson_Light
+            AppPreferences.THEME_AMETHYST -> Amethyst_Light
+            AppPreferences.THEME_NEUTRAL -> Neutral_Light
+            else -> Color(0xFFD8E2FF) // Fix: direct color for stability
+        }
+
+        lightColorScheme(
+            primary = primary,
+            onPrimary = White,
+            primaryContainer = container,
+            onPrimaryContainer = Color(0xFF001A41),
+            secondary = secondary,
+            onSecondary = White,
+            secondaryContainer = Color(0xFFFFE08C),
+            onSecondaryContainer = Color(0xFF241A00),
+            background = Light_Background,
+            onBackground = Black_Slate, // Fix: direct color for stability
+            surface = Light_Surface,
+            onSurface = Light_OnSurface,
+            surfaceVariant = Light_SurfaceVariant,
+            onSurfaceVariant = Light_OnSurfaceVariant,
+            outline = Light_Outline,
+            error = ErrorRed,
+            onError = OnErrorRed
+        )
+    }
 }
 
 @Composable
